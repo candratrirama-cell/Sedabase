@@ -1,9 +1,13 @@
 {
-  "name": "sedabase",
+  "name": "sedabase-pro",
   "private": true,
   "version": "1.0.0",
   "type": "module",
-  "scripts": { "dev": "vite", "build": "vite build", "preview": "vite preview" },
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
   "dependencies": {
     "firebase": "^10.8.0",
     "react": "^18.2.0",
