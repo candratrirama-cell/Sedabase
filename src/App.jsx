@@ -3,7 +3,7 @@ import { initializeApp } from "firebase/app";
 import { getDatabase, ref, set, onValue, update, remove } from "firebase/database";
 import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged, signOut } from "firebase/auth";
 
-// --- CONFIG FIREBASE (TETAP PAKAI MILIKMU) ---
+// --- CONFIG FIREBASE ---
 const firebaseConfig = {
   apiKey: "AIzaSyD1OHn2utYY881b504XEgMAwmhrglqtinQ",
   authDomain: "sedabase.firebaseapp.com",
@@ -23,9 +23,8 @@ export default function App() {
   const [user, setUser] = useState(null);
   const [userData, setUserData] = useState({ isPremium: false, projectLimit: 5 });
   const [projects, setProjects] = useState({});
-  const [activeTab, setActiveTab] = useState('dashboard'); // dashboard, docs, settings
-  const [selectedProject, setSelectedProject] = useState(null);
-  const [form, setForm] = useState({ name: '', ep: '', key: '', base: '', seda: '' });
+  const [activeTab, setActiveTab] = useState('dashboard');
+  const [projectName, setProjectName] = useState('');
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, (u) => {
@@ -41,14 +40,27 @@ export default function App() {
     return () => unsub();
   }, []);
 
-  const handleSave = (e) => {
+  const createProject = (e) => {
     e.preventDefault();
-    if (!selectedProject && Object.keys(projects).length >= userData.projectLimit) return alert("Limit Penuh!");
-    const id = selectedProject || Date.now();
-    update(ref(db, `users/${user.uid}/projects/${id}`), form).then(() => {
-      alert("Berhasil disimpan!");
-      setForm({ name: '', ep: '', key: '', base: '', seda: '' });
-      setSelectedProject(null);
+    if (Object.keys(projects).length >= userData.projectLimit) return alert("Limit Penuh! Upgrade ke Premium.");
+    
+    // LOGIKA OTOMATIS: Membuat data tanpa input user
+    const shortId = Math.random().toString(36).substring(2, 8).toUpperCase();
+    const slug = projectName.toLowerCase().replace(/\s+/g, '-');
+    const newId = `${slug}-${shortId}`;
+
+    const autoData = {
+      name: projectName,
+      project_id: newId,
+      endpoint: `https://api.sedabase.vercel.app/v1/${newId}`,
+      apikey: `sb_${Math.random().toString(36).substring(2, 15)}${Math.random().toString(36).substring(2, 15)}`,
+      sedabase: `db_${newId}`,
+      created_at: new Date().toISOString()
+    };
+
+    set(ref(db, `users/${user.uid}/projects/${newId}`), autoData).then(() => {
+      alert("Proyek Berhasil Dibuat Otomatis!");
+      setProjectName('');
     });
   };
 
@@ -56,79 +68,73 @@ export default function App() {
     if(confirm("Hapus proyek ini?")) remove(ref(db, `users/${user.uid}/projects/${id}`));
   };
 
-  const editProj = (id, data) => {
-    setSelectedProject(id);
-    setForm(data);
-    setActiveTab('dashboard');
-  };
-
   if (!user) return (
     <div style={st.center}>
-      <h1 style={{fontSize: '2.5rem', marginBottom: '10px'}}>Seda<span style={{color:'#3498db'}}>base</span></h1>
-      <p style={{color:'#666', marginBottom: '20px'}}>Cloud Key Management System</p>
-      <button style={st.btnPrimary} onClick={() => signInWithPopup(auth, provider)}>Login with Google</button>
+      <h1 style={{fontSize: '2.8rem', margin: 0}}>Seda<span style={{color:'#3498db'}}>base</span></h1>
+      <p style={{color:'#7f8c8d', marginBottom: '30px'}}>Automatic Key Provisioning</p>
+      <button style={st.btnPrimary} onClick={() => signInWithPopup(auth, provider)}>Get Started with Google</button>
     </div>
   );
 
   return (
     <div style={st.app}>
-      {/* Sidebar Mobile */}
       <nav style={st.nav}>
-        <h2 style={{margin:0, fontSize:'20px'}}>Seda<span>base</span></h2>
+        <h2 style={{margin:0}}>Seda<span>base</span></h2>
         <div style={{display:'flex', gap:'10px'}}>
           <button onClick={() => setActiveTab('dashboard')} style={activeTab === 'dashboard' ? st.navBtnA : st.navBtn}>Console</button>
           <button onClick={() => setActiveTab('docs')} style={activeTab === 'docs' ? st.navBtnA : st.navBtn}>API Docs</button>
         </div>
       </nav>
 
-      <main style={{padding: '20px', maxWidth: '800px', margin: 'auto'}}>
+      <main style={{padding: '20px', maxWidth: '600px', margin: 'auto'}}>
         {activeTab === 'dashboard' ? (
           <div>
             <div style={st.card}>
-              <h3>{selectedProject ? "Edit Project" : "Add New Project"}</h3>
-              <form onSubmit={handleSave} style={st.formGrid}>
-                <input placeholder="Project Name" value={form.name} onChange={e => setForm({...form, name: e.target.value})} required style={st.input} />
-                <input placeholder="Endpoint URL" value={form.ep} onChange={e => setForm({...form, ep: e.target.value})} style={st.input} />
-                <input placeholder="API Key" value={form.key} onChange={e => setForm({...form, key: e.target.value})} style={st.input} />
-                <input placeholder="Database Base" value={form.base} onChange={e => setForm({...form, base: e.target.value})} style={st.input} />
-                <button type="submit" style={st.btnSave}>{selectedProject ? "Update" : "Save Project"}</button>
-                {selectedProject && <button type="button" onClick={() => setSelectedProject(null)} style={st.btnCancel}>Cancel</button>}
+              <h3 style={{marginTop:0}}>New Project</h3>
+              <form onSubmit={createProject}>
+                <input 
+                  placeholder="Masukkan Nama Project Saja..." 
+                  value={projectName} 
+                  onChange={e => setProjectName(e.target.value)} 
+                  required 
+                  style={st.input} 
+                />
+                <button type="submit" style={st.btnSave}>Create & Generate Keys</button>
               </form>
             </div>
 
-            <div style={{marginTop: '20px'}}>
-              <h4>Your Projects ({Object.keys(projects).length}/{userData.projectLimit})</h4>
+            <div style={{marginTop: '30px'}}>
+              <div style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}>
+                <h4>Projects ({Object.keys(projects).length}/{userData.projectLimit})</h4>
+                {!userData.isPremium && <button style={st.badgePrem}>Free Plan</button>}
+              </div>
+              
               {Object.entries(projects).map(([id, p]) => (
                 <div key={id} style={st.projectCard}>
                   <div>
-                    <b>{p.name}</b><br/>
-                    <small style={{color:'#888'}}>{id}</small>
+                    <b style={{fontSize:'16px'}}>{p.name}</b><br/>
+                    <code style={{fontSize:'10px', color:'#3498db'}}>{id}</code>
                   </div>
-                  <div style={{display:'flex', gap:'5px'}}>
-                    <button onClick={() => editProj(id, p)} style={st.btnEdit}>Edit</button>
-                    <button onClick={() => deleteProj(id)} style={st.btnDel}>Del</button>
-                  </div>
+                  <button onClick={() => deleteProj(id)} style={st.btnDel}>✕</button>
                 </div>
               ))}
             </div>
           </div>
         ) : (
           <div>
-            <h3>API Documentation</h3>
-            <p style={{fontSize:'14px', color:'#666'}}>Gunakan kredensial ini untuk menghubungkan proyekmu ke aplikasi pihak ketiga.</p>
+            <h3>API Reference</h3>
             {Object.entries(projects).map(([id, p]) => (
               <div key={id} style={st.docsCard}>
                 <div style={st.docsHeader}>{p.name}</div>
                 <div style={st.docsBody}>
-                  <code><b>GET</b> /config/{id}</code>
-                  <pre style={st.codeBox}>
-{`{
-  "project_id": "${id}",
-  "endpoint": "${p.ep || 'none'}",
-  "api_key": "${p.key || 'none'}",
-  "db_base": "${p.base || 'none'}"
-}`}
-                  </pre>
+                   <p style={st.label}>Endpoint URL</p>
+                   <code style={st.val}>{p.endpoint}</code>
+                   
+                   <p style={st.label}>X-API-KEY</p>
+                   <code style={st.val}>{p.apikey}</code>
+
+                   <p style={st.label}>Sedabase ID</p>
+                   <code style={st.val}>{p.sedabase}</code>
                 </div>
               </div>
             ))}
@@ -141,23 +147,22 @@ export default function App() {
 }
 
 const st = {
-  app: { minHeight: '100vh', background: '#f8f9fa', fontFamily: 'sans-serif' },
-  nav: { background: '#1c1c1e', color: 'white', padding: '15px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', position: 'sticky', top: 0, zIndex: 10 },
-  navBtn: { background: 'none', border: 'none', color: '#aaa', cursor: 'pointer', fontSize:'14px' },
-  navBtnA: { background: '#3498db', border: 'none', color: 'white', padding: '5px 12px', borderRadius: '15px', fontSize:'14px' },
-  center: { display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100vh', textAlign: 'center' },
-  card: { background: 'white', padding: '20px', borderRadius: '12px', boxShadow: '0 2px 10px rgba(0,0,0,0.05)' },
-  formGrid: { display: 'grid', gap: '10px' },
-  input: { padding: '12px', borderRadius: '8px', border: '1px solid #ddd', fontSize: '14px' },
-  btnPrimary: { padding: '12px 25px', background: '#3498db', color: 'white', border: 'none', borderRadius: '25px', fontWeight: 'bold' },
-  btnSave: { padding: '12px', background: '#2ecc71', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' },
-  btnCancel: { padding: '12px', background: '#95a5a6', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer' },
-  projectCard: { background: 'white', padding: '15px', borderRadius: '10px', marginBottom: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', border: '1px solid #eee' },
-  btnEdit: { background: '#f1c40f', border: 'none', padding: '5px 10px', borderRadius: '5px', fontSize: '12px' },
-  btnDel: { background: '#e74c3c', color: 'white', border: 'none', padding: '5px 10px', borderRadius: '5px', fontSize: '12px' },
-  docsCard: { background: '#fff', borderRadius: '10px', marginBottom: '20px', overflow: 'hidden', border: '1px solid #ddd' },
-  docsHeader: { background: '#f1f1f1', padding: '10px 15px', fontWeight: 'bold', fontSize: '14px' },
+  app: { minHeight: '100vh', background: '#f9fafb', fontFamily: '-apple-system, sans-serif' },
+  nav: { background: '#111827', color: 'white', padding: '15px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', position: 'sticky', top: 0, zIndex: 10 },
+  navBtn: { background: 'none', border: 'none', color: '#9ca3af', cursor: 'pointer', fontWeight: '500' },
+  navBtnA: { background: '#3b82f6', border: 'none', color: 'white', padding: '6px 15px', borderRadius: '20px' },
+  center: { display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100vh' },
+  card: { background: 'white', padding: '25px', borderRadius: '16px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)' },
+  input: { width: '100%', padding: '14px', borderRadius: '10px', border: '1px solid #e5e7eb', marginBottom: '15px', boxSizing: 'border-box', fontSize:'16px' },
+  btnPrimary: { padding: '14px 30px', background: '#3b82f6', color: 'white', border: 'none', borderRadius: '30px', fontWeight: 'bold', fontSize:'16px' },
+  btnSave: { width: '100%', padding: '14px', background: '#10b981', color: 'white', border: 'none', borderRadius: '10px', fontWeight: 'bold', cursor: 'pointer' },
+  projectCard: { background: 'white', padding: '15px 20px', borderRadius: '12px', marginBottom: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', border: '1px solid #f3f4f6' },
+  btnDel: { background: '#fee2e2', color: '#ef4444', border: 'none', width: '30px', height: '30px', borderRadius: '50%', cursor: 'pointer' },
+  docsCard: { background: '#fff', borderRadius: '12px', marginBottom: '20px', border: '1px solid #e5e7eb', overflow: 'hidden' },
+  docsHeader: { background: '#f9fafb', padding: '12px 15px', fontWeight: 'bold', borderBottom: '1px solid #e5e7eb' },
   docsBody: { padding: '15px' },
-  codeBox: { background: '#272822', color: '#f8f8f2', padding: '15px', borderRadius: '5px', fontSize: '12px', overflowX: 'auto' },
-  btnOut: { width: '100%', marginTop: '30px', padding: '12px', background: 'none', border: '1px solid #e74c3c', color: '#e74c3c', borderRadius: '8px', cursor: 'pointer' }
+  label: { margin: '10px 0 5px', fontSize: '11px', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '1px' },
+  val: { display: 'block', background: '#f3f4f6', padding: '10px', borderRadius: '6px', fontSize: '12px', wordBreak: 'break-all', color: '#1f2937' },
+  badgePrem: { background: '#dcfce7', color: '#15803d', border: 'none', padding: '4px 10px', borderRadius: '20px', fontSize: '12px' },
+  btnOut: { width: '100%', marginTop: '40px', padding: '12px', background: 'none', border: '1px solid #d1d5db', color: '#6b7280', borderRadius: '10px', cursor: 'pointer' }
 };
