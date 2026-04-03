@@ -1,9 +1,8 @@
-import React, { useState, useEffect } from 'react';
-import { initializeApp } from "firebase/app";
-import { getDatabase, ref, set, onValue, update, remove } from "firebase/database";
-import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged, signOut } from "firebase/auth";
+import { useState, useEffect } from 'react'
+import { initializeApp } from "firebase/app"
+import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged, signOut } from "firebase/auth"
+import { getDatabase, ref, onValue, update, increment, set } from "firebase/database"
 
-// --- KONFIGURASI FIREBASE ---
 const firebaseConfig = {
   apiKey: "AIzaSyD1OHn2utYY881b504XEgMAwmhrglqtinQ",
   authDomain: "sedabase.firebaseapp.com",
@@ -15,143 +14,71 @@ const firebaseConfig = {
 };
 
 const app = initializeApp(firebaseConfig);
-const db = getDatabase(app);
 const auth = getAuth(app);
+const db = getDatabase(app);
 const provider = new GoogleAuthProvider();
 
 export default function App() {
   const [user, setUser] = useState(null);
-  const [profile, setProfile] = useState({ isPremium: false, limit: 5 });
-  const [projects, setProjects] = useState({});
-  const [view, setView] = useState('home'); // home | docs | explorer
-  const [loading, setLoading] = useState(true);
+  const [saldo, setSaldo] = useState(0);
+  const [depoAmt, setDepoAmt] = useState("");
+  const [qrCode, setQrCode] = useState(null);
+  const [wd, setWd] = useState({ wallet: "DANA", target: "", amount: "" });
 
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, (u) => {
+    return onAuthStateChanged(auth, (u) => {
       setUser(u);
-      if (u) {
-        // Sync Profile & Limits
-        onValue(ref(db, `users/${u.uid}/profile`), (s) => {
-          setProfile(s.val() || { isPremium: false, limit: 5 });
-        });
-        // Sync Projects
-        onValue(ref(db, `users/${u.uid}/projects`), (s) => {
-          setProjects(s.val() || {});
-        });
-      }
-      setLoading(false);
+      if (u) onValue(ref(db, `users/${u.uid}/saldo`), (s) => setSaldo(s.val() || 0));
     });
-    return () => unsub();
   }, []);
 
-  const createProject = (name) => {
-    if (Object.keys(projects).length >= profile.limit) return alert("Limit tercapai!");
-    const id = Math.random().toString(36).substring(2, 7).toUpperCase();
-    const slug = name.toLowerCase().replace(/\s+/g, '-');
-    const projectId = `${slug}-${id}`;
-
-    const newProject = {
-        name,
-        projectId,
-        apiKey: `sb_key_${Math.random().toString(36).substring(2, 15)}`,
-        endpoint: `https://sedabase.vercel.app/${projectId}`,
-        createdAt: new Date().toISOString()
-    };
-
-    set(ref(db, `users/${user.uid}/projects/${projectId}`), newProject);
+  const handleWithdraw = async () => {
+    const total = parseInt(wd.amount) + 1000;
+    if (wd.amount < 10000 || saldo < total) return alert("Cek Saldo/Minimal 10k");
+    const id = "PAY" + Math.random().toString(36).substring(7).toUpperCase();
+    await update(ref(db, `users/${user.uid}`), { saldo: increment(-total) });
+    await set(ref(db, `withdrawals/${id}`), { ...wd, uid: user.uid, status: "pending", time: Date.now() });
+    alert(`Request ${id} Terkirim!`);
   };
 
-  if (loading) return <div style={st.center}>Memuat Sedabase...</div>;
-
   if (!user) return (
-    <div style={st.center}>
-      <h1 style={st.logo}>Seda<span style={{color:'#3b82f6'}}>base</span></h1>
-      <p style={{marginBottom:'20px', color:'#666'}}>The Future of Mobile Database PaaS</p>
-      <button style={st.btnAuth} onClick={() => signInWithPopup(auth, provider)}>Sign in with Google</button>
+    <div className="h-screen flex items-center justify-center p-6">
+      <div className="bg-white p-8 border-4 border-black shadow-[8px_8px_0px_black] text-center w-full max-w-xs">
+        <h1 className="text-3xl font-black italic mb-6">SEDABASE</h1>
+        <button onClick={() => signInWithPopup(auth, provider)} className="w-full bg-white border-4 border-black p-3 font-black uppercase shadow-[4px_4px_0px_black] active:shadow-none active:translate-x-1 active:translate-y-1 transition-all">Login Google</button>
+      </div>
     </div>
   );
 
   return (
-    <div style={st.app}>
-      {/* NAVBAR */}
-      <nav style={st.nav}>
-        <h2 style={{fontSize:'18px'}}>Sedabase</h2>
-        <div style={{display:'flex', gap:'15px'}}>
-          <button onClick={() => setView('home')} style={view === 'home' ? st.navA : st.navI}>Projects</button>
-          <button onClick={() => setView('docs')} style={view === 'docs' ? st.navA : st.navI}>API</button>
-        </div>
-      </nav>
+    <div className="p-4 max-w-md mx-auto space-y-6">
+      <header className="bg-white p-4 border-4 border-black shadow-[4px_4px_0px_black] flex justify-between items-center">
+        <h1 className="font-black italic">SEDABASE</h1>
+        <button onClick={() => signOut(auth)} className="text-[10px] font-bold border-2 border-black px-2 py-1 bg-red-400">LOGOUT</button>
+      </header>
 
-      {/* CONTENT */}
-      <main style={st.main}>
-        {view === 'home' ? (
-          <div>
-            <div style={st.card}>
-                <h4 style={{marginBottom:'10px'}}>Quick Create</h4>
-                <div style={{display:'flex', gap:'10px'}}>
-                    <input id="pname" placeholder="Project Name..." style={st.input} />
-                    <button style={st.btnCreate} onClick={() => {
-                        const val = document.getElementById('pname').value;
-                        if(val) createProject(val);
-                    }}>Generate</button>
-                </div>
-            </div>
+      <div className="bg-green-400 p-6 border-4 border-black shadow-[6px_6px_0px_black]">
+        <p className="text-xs font-bold uppercase">Saldo:</p>
+        <h2 className="text-4xl font-black">Rp {saldo.toLocaleString('id-ID')}</h2>
+      </div>
 
-            <h4 style={{margin:'20px 0 10px'}}>Your Infrastructure ({Object.keys(projects).length}/{profile.limit})</h4>
-            {Object.entries(projects).map(([id, p]) => (
-                <div key={id} style={st.projCard}>
-                    <div>
-                        <div style={{fontWeight:'bold'}}>{p.name}</div>
-                        <code style={{fontSize:'10px', color:'#3b82f6'}}>{p.projectId}</code>
-                    </div>
-                    <button onClick={() => remove(ref(db, `users/${user.uid}/projects/${id}`))} style={st.btnDel}>✕</button>
-                </div>
-            ))}
-          </div>
-        ) : (
-          <div>
-            <h3 style={{marginBottom:'15px'}}>API Credentials</h3>
-            {Object.entries(projects).map(([id, p]) => (
-                <div key={id} style={st.docsCard}>
-                    <div style={st.docsHead}>{p.name}</div>
-                    <div style={st.docsBody}>
-                        <label style={st.label}>ENDPOINT</label>
-                        <code style={st.code}>{p.endpoint}</code>
-                        <label style={st.label}>X-API-KEY</label>
-                        <code style={st.code}>{p.apiKey}</code>
-                    </div>
-                </div>
-            ))}
-          </div>
-        )}
-      </main>
+      <div className="bg-white p-6 border-4 border-black shadow-[6px_6px_0px_black]">
+        <h3 className="font-black mb-4 uppercase underline">Deposit</h3>
+        <input type="number" value={depoAmt} onChange={e => setDepoAmt(e.target.value)} placeholder="Min 1000" className="w-full p-2 border-4 border-black font-bold mb-3" />
+        <button onClick={() => setQrCode(`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=SEDABASE-${depoAmt}`)} className="w-full bg-blue-500 p-3 font-black uppercase border-4 border-black shadow-[4px_4px_0px_black] active:shadow-none active:translate-x-1 active:translate-y-1 transition-all">Top Up</button>
+        {qrCode && <img src={qrCode} className="mt-4 mx-auto border-4 border-black p-1" />}
+      </div>
 
-      <footer style={st.footer}>
-          <button onClick={() => signOut(auth)} style={st.btnOut}>Logout {user.displayName}</button>
-      </footer>
+      <div className="bg-white p-6 border-4 border-black shadow-[6px_6px_0px_black]">
+        <h3 className="font-black mb-4 uppercase underline text-red-600">Withdraw</h3>
+        <select value={wd.wallet} onChange={e => setWd({...wd, wallet: e.target.value})} className="w-full p-2 border-4 border-black font-bold mb-2">
+          <option>DANA</option><option>GOPAY</option>
+        </select>
+        <input type="text" placeholder="Nomor" onChange={e => setWd({...wd, target: e.target.value})} className="w-full p-2 border-4 border-black font-bold mb-2" />
+        <input type="number" placeholder="Min 10000" onChange={e => setWd({...wd, amount: e.target.value})} className="w-full p-2 border-4 border-black font-bold mb-2" />
+        <p className="text-[10px] font-bold mb-3 italic">Admin Rp 1.000 | Proses Maks 120 Jam</p>
+        <button onClick={handleWithdraw} className="w-full bg-red-500 p-3 font-black uppercase border-4 border-black shadow-[4px_4px_0px_black] active:shadow-none active:translate-x-1 active:translate-y-1 transition-all">Tarik Dana</button>
+      </div>
     </div>
   );
 }
-
-const st = {
-  center: { display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100vh', fontFamily: 'sans-serif' },
-  logo: { fontSize: '40px', fontWeight: 'bold', margin: 0 },
-  btnAuth: { padding: '12px 24px', background: '#3b82f6', color: 'white', border: 'none', borderRadius: '30px', fontWeight: 'bold' },
-  app: { background: '#f3f4f6', minHeight: '100vh', fontFamily: 'sans-serif' },
-  nav: { background: '#111827', color: 'white', padding: '15px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', position:'sticky', top:0 },
-  navI: { background: 'none', border: 'none', color: '#9ca3af', fontSize:'14px' },
-  navA: { background: '#3b82f6', border: 'none', color: 'white', padding: '5px 12px', borderRadius: '15px', fontSize:'14px' },
-  main: { padding: '20px', maxWidth: '600px', margin: 'auto' },
-  card: { background: 'white', padding: '20px', borderRadius: '15px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)' },
-  input: { flex: 1, padding: '10px', borderRadius: '8px', border: '1px solid #ddd', fontSize:'14px' },
-  btnCreate: { background: '#10b981', color: 'white', border: 'none', padding: '10px 15px', borderRadius: '8px', fontWeight: 'bold' },
-  projCard: { background: 'white', padding: '15px', borderRadius: '12px', marginBottom: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', border: '1px solid #e5e7eb' },
-  btnDel: { background: '#fee2e2', color: '#ef4444', border: 'none', width: '25px', height: '25px', borderRadius: '50%' },
-  docsCard: { background: '#fff', borderRadius: '12px', marginBottom: '20px', overflow: 'hidden', border: '1px solid #ddd' },
-  docsHead: { background: '#f9fafb', padding: '10px 15px', fontWeight: 'bold', borderBottom: '1px solid #eee' },
-  docsBody: { padding: '15px' },
-  label: { fontSize: '10px', color: '#6b7280', display: 'block', marginTop: '10px' },
-  code: { display: 'block', background: '#f3f4f6', padding: '8px', borderRadius: '5px', fontSize: '11px', wordBreak: 'break-all', marginTop: '5px' },
-  footer: { padding: '20px', textAlign: 'center' },
-  btnOut: { background: 'none', border: 'none', color: '#ef4444', fontSize: '12px', textDecoration: 'underline' }
-};
