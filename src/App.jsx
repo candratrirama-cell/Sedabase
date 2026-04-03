@@ -3,7 +3,7 @@ import { initializeApp } from "firebase/app";
 import { getDatabase, ref, set, onValue, update, remove } from "firebase/database";
 import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged, signOut } from "firebase/auth";
 
-// --- CONFIG FIREBASE ---
+// --- KONFIGURASI FIREBASE ---
 const firebaseConfig = {
   apiKey: "AIzaSyD1OHn2utYY881b504XEgMAwmhrglqtinQ",
   authDomain: "sedabase.firebaseapp.com",
@@ -21,148 +21,137 @@ const provider = new GoogleAuthProvider();
 
 export default function App() {
   const [user, setUser] = useState(null);
-  const [userData, setUserData] = useState({ isPremium: false, projectLimit: 5 });
+  const [profile, setProfile] = useState({ isPremium: false, limit: 5 });
   const [projects, setProjects] = useState({});
-  const [activeTab, setActiveTab] = useState('dashboard');
-  const [projectName, setProjectName] = useState('');
+  const [view, setView] = useState('home'); // home | docs | explorer
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, (u) => {
       setUser(u);
       if (u) {
+        // Sync Profile & Limits
         onValue(ref(db, `users/${u.uid}/profile`), (s) => {
-          if (s.exists()) setUserData(s.val());
-          else set(ref(db, `users/${u.uid}/profile`), { isPremium: false, projectLimit: 5 });
+          setProfile(s.val() || { isPremium: false, limit: 5 });
         });
-        onValue(ref(db, `users/${u.uid}/projects`), (s) => setProjects(s.val() || {}));
+        // Sync Projects
+        onValue(ref(db, `users/${u.uid}/projects`), (s) => {
+          setProjects(s.val() || {});
+        });
       }
+      setLoading(false);
     });
     return () => unsub();
   }, []);
 
-  const createProject = (e) => {
-    e.preventDefault();
-    if (Object.keys(projects).length >= userData.projectLimit) return alert("Limit Penuh! Upgrade ke Premium.");
-    
-    // LOGIKA OTOMATIS: Membuat data tanpa input user
-    const shortId = Math.random().toString(36).substring(2, 8).toUpperCase();
-    const slug = projectName.toLowerCase().replace(/\s+/g, '-');
-    const newId = `${slug}-${shortId}`;
+  const createProject = (name) => {
+    if (Object.keys(projects).length >= profile.limit) return alert("Limit tercapai!");
+    const id = Math.random().toString(36).substring(2, 7).toUpperCase();
+    const slug = name.toLowerCase().replace(/\s+/g, '-');
+    const projectId = `${slug}-${id}`;
 
-    const autoData = {
-      name: projectName,
-      project_id: newId,
-      endpoint: `https://api.sedabase.vercel.app/v1/${newId}`,
-      apikey: `sb_${Math.random().toString(36).substring(2, 15)}${Math.random().toString(36).substring(2, 15)}`,
-      sedabase: `db_${newId}`,
-      created_at: new Date().toISOString()
+    const newProject = {
+        name,
+        projectId,
+        apiKey: `sb_key_${Math.random().toString(36).substring(2, 15)}`,
+        endpoint: `https://sedabase.vercel.app/${projectId}`,
+        createdAt: new Date().toISOString()
     };
 
-    set(ref(db, `users/${user.uid}/projects/${newId}`), autoData).then(() => {
-      alert("Proyek Berhasil Dibuat Otomatis!");
-      setProjectName('');
-    });
+    set(ref(db, `users/${user.uid}/projects/${projectId}`), newProject);
   };
 
-  const deleteProj = (id) => {
-    if(confirm("Hapus proyek ini?")) remove(ref(db, `users/${user.uid}/projects/${id}`));
-  };
+  if (loading) return <div style={st.center}>Memuat Sedabase...</div>;
 
   if (!user) return (
     <div style={st.center}>
-      <h1 style={{fontSize: '2.8rem', margin: 0}}>Seda<span style={{color:'#3498db'}}>base</span></h1>
-      <p style={{color:'#7f8c8d', marginBottom: '30px'}}>Automatic Key Provisioning</p>
-      <button style={st.btnPrimary} onClick={() => signInWithPopup(auth, provider)}>Get Started with Google</button>
+      <h1 style={st.logo}>Seda<span style={{color:'#3b82f6'}}>base</span></h1>
+      <p style={{marginBottom:'20px', color:'#666'}}>The Future of Mobile Database PaaS</p>
+      <button style={st.btnAuth} onClick={() => signInWithPopup(auth, provider)}>Sign in with Google</button>
     </div>
   );
 
   return (
     <div style={st.app}>
+      {/* NAVBAR */}
       <nav style={st.nav}>
-        <h2 style={{margin:0}}>Seda<span>base</span></h2>
-        <div style={{display:'flex', gap:'10px'}}>
-          <button onClick={() => setActiveTab('dashboard')} style={activeTab === 'dashboard' ? st.navBtnA : st.navBtn}>Console</button>
-          <button onClick={() => setActiveTab('docs')} style={activeTab === 'docs' ? st.navBtnA : st.navBtn}>API Docs</button>
+        <h2 style={{fontSize:'18px'}}>Sedabase</h2>
+        <div style={{display:'flex', gap:'15px'}}>
+          <button onClick={() => setView('home')} style={view === 'home' ? st.navA : st.navI}>Projects</button>
+          <button onClick={() => setView('docs')} style={view === 'docs' ? st.navA : st.navI}>API</button>
         </div>
       </nav>
 
-      <main style={{padding: '20px', maxWidth: '600px', margin: 'auto'}}>
-        {activeTab === 'dashboard' ? (
+      {/* CONTENT */}
+      <main style={st.main}>
+        {view === 'home' ? (
           <div>
             <div style={st.card}>
-              <h3 style={{marginTop:0}}>New Project</h3>
-              <form onSubmit={createProject}>
-                <input 
-                  placeholder="Masukkan Nama Project Saja..." 
-                  value={projectName} 
-                  onChange={e => setProjectName(e.target.value)} 
-                  required 
-                  style={st.input} 
-                />
-                <button type="submit" style={st.btnSave}>Create & Generate Keys</button>
-              </form>
+                <h4 style={{marginBottom:'10px'}}>Quick Create</h4>
+                <div style={{display:'flex', gap:'10px'}}>
+                    <input id="pname" placeholder="Project Name..." style={st.input} />
+                    <button style={st.btnCreate} onClick={() => {
+                        const val = document.getElementById('pname').value;
+                        if(val) createProject(val);
+                    }}>Generate</button>
+                </div>
             </div>
 
-            <div style={{marginTop: '30px'}}>
-              <div style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}>
-                <h4>Projects ({Object.keys(projects).length}/{userData.projectLimit})</h4>
-                {!userData.isPremium && <button style={st.badgePrem}>Free Plan</button>}
-              </div>
-              
-              {Object.entries(projects).map(([id, p]) => (
-                <div key={id} style={st.projectCard}>
-                  <div>
-                    <b style={{fontSize:'16px'}}>{p.name}</b><br/>
-                    <code style={{fontSize:'10px', color:'#3498db'}}>{id}</code>
-                  </div>
-                  <button onClick={() => deleteProj(id)} style={st.btnDel}>✕</button>
+            <h4 style={{margin:'20px 0 10px'}}>Your Infrastructure ({Object.keys(projects).length}/{profile.limit})</h4>
+            {Object.entries(projects).map(([id, p]) => (
+                <div key={id} style={st.projCard}>
+                    <div>
+                        <div style={{fontWeight:'bold'}}>{p.name}</div>
+                        <code style={{fontSize:'10px', color:'#3b82f6'}}>{p.projectId}</code>
+                    </div>
+                    <button onClick={() => remove(ref(db, `users/${user.uid}/projects/${id}`))} style={st.btnDel}>✕</button>
                 </div>
-              ))}
-            </div>
+            ))}
           </div>
         ) : (
           <div>
-            <h3>API Reference</h3>
+            <h3 style={{marginBottom:'15px'}}>API Credentials</h3>
             {Object.entries(projects).map(([id, p]) => (
-              <div key={id} style={st.docsCard}>
-                <div style={st.docsHeader}>{p.name}</div>
-                <div style={st.docsBody}>
-                   <p style={st.label}>Endpoint URL</p>
-                   <code style={st.val}>{p.endpoint}</code>
-                   
-                   <p style={st.label}>X-API-KEY</p>
-                   <code style={st.val}>{p.apikey}</code>
-
-                   <p style={st.label}>Sedabase ID</p>
-                   <code style={st.val}>{p.sedabase}</code>
+                <div key={id} style={st.docsCard}>
+                    <div style={st.docsHead}>{p.name}</div>
+                    <div style={st.docsBody}>
+                        <label style={st.label}>ENDPOINT</label>
+                        <code style={st.code}>{p.endpoint}</code>
+                        <label style={st.label}>X-API-KEY</label>
+                        <code style={st.code}>{p.apiKey}</code>
+                    </div>
                 </div>
-              </div>
             ))}
           </div>
         )}
-        <button onClick={() => signOut(auth)} style={st.btnOut}>Sign Out</button>
       </main>
+
+      <footer style={st.footer}>
+          <button onClick={() => signOut(auth)} style={st.btnOut}>Logout {user.displayName}</button>
+      </footer>
     </div>
   );
 }
 
 const st = {
-  app: { minHeight: '100vh', background: '#f9fafb', fontFamily: '-apple-system, sans-serif' },
-  nav: { background: '#111827', color: 'white', padding: '15px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', position: 'sticky', top: 0, zIndex: 10 },
-  navBtn: { background: 'none', border: 'none', color: '#9ca3af', cursor: 'pointer', fontWeight: '500' },
-  navBtnA: { background: '#3b82f6', border: 'none', color: 'white', padding: '6px 15px', borderRadius: '20px' },
-  center: { display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100vh' },
-  card: { background: 'white', padding: '25px', borderRadius: '16px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)' },
-  input: { width: '100%', padding: '14px', borderRadius: '10px', border: '1px solid #e5e7eb', marginBottom: '15px', boxSizing: 'border-box', fontSize:'16px' },
-  btnPrimary: { padding: '14px 30px', background: '#3b82f6', color: 'white', border: 'none', borderRadius: '30px', fontWeight: 'bold', fontSize:'16px' },
-  btnSave: { width: '100%', padding: '14px', background: '#10b981', color: 'white', border: 'none', borderRadius: '10px', fontWeight: 'bold', cursor: 'pointer' },
-  projectCard: { background: 'white', padding: '15px 20px', borderRadius: '12px', marginBottom: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', border: '1px solid #f3f4f6' },
-  btnDel: { background: '#fee2e2', color: '#ef4444', border: 'none', width: '30px', height: '30px', borderRadius: '50%', cursor: 'pointer' },
-  docsCard: { background: '#fff', borderRadius: '12px', marginBottom: '20px', border: '1px solid #e5e7eb', overflow: 'hidden' },
-  docsHeader: { background: '#f9fafb', padding: '12px 15px', fontWeight: 'bold', borderBottom: '1px solid #e5e7eb' },
+  center: { display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100vh', fontFamily: 'sans-serif' },
+  logo: { fontSize: '40px', fontWeight: 'bold', margin: 0 },
+  btnAuth: { padding: '12px 24px', background: '#3b82f6', color: 'white', border: 'none', borderRadius: '30px', fontWeight: 'bold' },
+  app: { background: '#f3f4f6', minHeight: '100vh', fontFamily: 'sans-serif' },
+  nav: { background: '#111827', color: 'white', padding: '15px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', position:'sticky', top:0 },
+  navI: { background: 'none', border: 'none', color: '#9ca3af', fontSize:'14px' },
+  navA: { background: '#3b82f6', border: 'none', color: 'white', padding: '5px 12px', borderRadius: '15px', fontSize:'14px' },
+  main: { padding: '20px', maxWidth: '600px', margin: 'auto' },
+  card: { background: 'white', padding: '20px', borderRadius: '15px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)' },
+  input: { flex: 1, padding: '10px', borderRadius: '8px', border: '1px solid #ddd', fontSize:'14px' },
+  btnCreate: { background: '#10b981', color: 'white', border: 'none', padding: '10px 15px', borderRadius: '8px', fontWeight: 'bold' },
+  projCard: { background: 'white', padding: '15px', borderRadius: '12px', marginBottom: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', border: '1px solid #e5e7eb' },
+  btnDel: { background: '#fee2e2', color: '#ef4444', border: 'none', width: '25px', height: '25px', borderRadius: '50%' },
+  docsCard: { background: '#fff', borderRadius: '12px', marginBottom: '20px', overflow: 'hidden', border: '1px solid #ddd' },
+  docsHead: { background: '#f9fafb', padding: '10px 15px', fontWeight: 'bold', borderBottom: '1px solid #eee' },
   docsBody: { padding: '15px' },
-  label: { margin: '10px 0 5px', fontSize: '11px', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '1px' },
-  val: { display: 'block', background: '#f3f4f6', padding: '10px', borderRadius: '6px', fontSize: '12px', wordBreak: 'break-all', color: '#1f2937' },
-  badgePrem: { background: '#dcfce7', color: '#15803d', border: 'none', padding: '4px 10px', borderRadius: '20px', fontSize: '12px' },
-  btnOut: { width: '100%', marginTop: '40px', padding: '12px', background: 'none', border: '1px solid #d1d5db', color: '#6b7280', borderRadius: '10px', cursor: 'pointer' }
+  label: { fontSize: '10px', color: '#6b7280', display: 'block', marginTop: '10px' },
+  code: { display: 'block', background: '#f3f4f6', padding: '8px', borderRadius: '5px', fontSize: '11px', wordBreak: 'break-all', marginTop: '5px' },
+  footer: { padding: '20px', textAlign: 'center' },
+  btnOut: { background: 'none', border: 'none', color: '#ef4444', fontSize: '12px', textDecoration: 'underline' }
 };
